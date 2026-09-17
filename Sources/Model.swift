@@ -44,9 +44,9 @@ struct CodexWindow: Equatable, Sendable {
     let resetAt: Date?
 
     var label: String {
-        guard let seconds = windowSeconds else { return "Window" }
-        if seconds == 604_800 { return "Weekly" }
-        return "\(seconds / 3600)h window"
+        guard let seconds = windowSeconds else { return "Rate limit" }
+        if seconds == 604_800 { return "Weekly limit" }
+        return "\(seconds / 3600)-hour limit"
     }
 }
 
@@ -128,9 +128,9 @@ func parseClaudeUsage(_ data: Data, plan: String? = nil) throws -> ClaudeUsage {
         guard let raw, let utilization = raw.utilization else { return nil }
         return ClaudeWindow(label: label, utilization: utilization, resetsAt: raw.resetsAt?.date)
     }
-    let windows = [window(response.fiveHour, "5-hour window"), window(response.sevenDay, "Weekly")].compactMap { $0 }
+    let windows = [window(response.fiveHour, "5-hour limit"), window(response.sevenDay, "Weekly limit")].compactMap { $0 }
 
-    guard spend != nil || !windows.isEmpty else { throw UsageError.missingField("spend limit or rate windows") }
+    guard spend != nil || !windows.isEmpty else { throw UsageError.missingField("spend limit or rate limits") }
     return ClaudeUsage(plan: plan, spend: spend, windows: windows)
 }
 
@@ -236,7 +236,7 @@ func codexLines(_ usage: CodexUsage, now: Date, timeZone: TimeZone = .current) -
         return line
     }
     if lines.isEmpty {
-        lines.append(usage.unlimitedCredits ? "Unlimited credits, no rate windows" : "No rate windows reported")
+        lines.append(usage.unlimitedCredits ? "Unlimited credits, no rate limits" : "No rate limits reported")
     }
     if usage.limitReached { lines.append("Limit reached") }
     return lines

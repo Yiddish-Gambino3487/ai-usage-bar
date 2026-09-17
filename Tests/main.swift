@@ -37,7 +37,7 @@ do {
     check(lines[1], "Resets in 14 days (Sep 30, 8:00 PM)", "reset line in Eastern")
 } catch { check(false, "unexpected error \(error)") }
 
-print("Claude on a plan with rate windows and no spend limit")
+print("Claude on a plan with rate limits and no spend limit")
 let windowsJSON = """
 {"five_hour":{"utilization":12.5,"resets_at":"2026-09-17T15:00:00.000000+00:00"},
  "seven_day":{"utilization":41.0,"resets_at":"2026-09-20T17:00:00Z"},
@@ -47,15 +47,15 @@ do {
     let usage = try parseClaudeUsage(windowsJSON, plan: "max")
     check(usage.spend, nil, "no spend block")
     check(usage.windows.count, 2, "both windows parsed")
-    check(usage.percent, 41, "percent is the fuller window")
+    check(usage.percent, 41, "percent is the fuller rate limit")
     let lines = claudeLines(usage, now: now, timeZone: eastern)
-    check(lines, ["5-hour window 12% · resets 11:00 AM", "Weekly 41% · resets Sun 1:00 PM"], "window lines")
+    check(lines, ["5-hour limit 12% · resets 11:00 AM", "Weekly limit 41% · resets Sun 1:00 PM"], "rate limit lines")
 } catch { check(false, "unexpected error \(error)") }
 
-print("Claude with neither spend nor windows")
+print("Claude with neither spend nor rate limits")
 let emptyJSON = #"{"five_hour":null,"seven_day":null,"spend":null}"#.data(using: .utf8)!
 do { _ = try parseClaudeUsage(emptyJSON); check(false, "should have thrown") }
-catch let error as UsageError { check(error, .missingField("spend limit or rate windows"), "clear error") }
+catch let error as UsageError { check(error, .missingField("spend limit or rate limits"), "clear error") }
 catch { check(false, "wrong error type \(error)") }
 
 // MARK: Codex parsing
@@ -69,14 +69,14 @@ print("Codex parsing")
 do {
     let usage = try parseCodexUsage(codexJSON, now: now)
     check(usage.planType, "plus", "plan type")
-    check(usage.primary?.label, "5h window", "primary label")
-    check(usage.secondary?.label, "Weekly", "secondary label")
-    check(usage.percent, 34, "menubar percent is the fuller window")
+    check(usage.primary?.label, "5-hour limit", "primary label")
+    check(usage.secondary?.label, "Weekly limit", "secondary label")
+    check(usage.percent, 34, "menubar percent is the fuller rate limit")
     check(usage.shortStatus, "34%", "short status uses the percent when metered")
     check(usage.secondary?.resetAt, now.addingTimeInterval(300_000), "reset_after_seconds fallback")
     let lines = codexLines(usage, now: now, timeZone: eastern)
-    check(lines[0], "5h window 12% · resets 11:40 AM", "primary line")
-    check(lines[1], "Weekly 34% · resets Sun 9:12 PM", "secondary line shows weekday when >24h out")
+    check(lines[0], "5-hour limit 12% · resets 11:40 AM", "primary line")
+    check(lines[1], "Weekly limit 34% · resets Sun 9:12 PM", "secondary line shows weekday when >24h out")
 } catch { check(false, "unexpected error \(error)") }
 
 print("Codex on an unmetered Business plan (live shape on 2026-09-17)")
@@ -87,9 +87,9 @@ let businessJSON = """
 """.data(using: .utf8)!
 do {
     let usage = try parseCodexUsage(businessJSON, now: now)
-    check(usage.percent, nil, "no percent without windows")
+    check(usage.percent, nil, "no percent without rate limits")
     check(usage.shortStatus, "OK", "menubar shows OK when unlimited")
-    check(codexLines(usage, now: now), ["Unlimited credits, no rate windows"], "dropdown explains no meter")
+    check(codexLines(usage, now: now), ["Unlimited credits, no rate limits"], "dropdown explains no meter")
 } catch { check(false, "unexpected error \(error)") }
 
 print("Codex limit reached")
@@ -97,7 +97,7 @@ let limitedJSON = #"{"plan_type":"business","rate_limit":null,"rate_limit_reache
 do {
     let usage = try parseCodexUsage(limitedJSON, now: now)
     check(usage.shortStatus, "LIMITED", "menubar shows LIMITED")
-    check(codexLines(usage, now: now), ["No rate windows reported", "Limit reached"], "dropdown flags the limit")
+    check(codexLines(usage, now: now), ["No rate limits reported", "Limit reached"], "dropdown flags the limit")
 } catch { check(false, "unexpected error \(error)") }
 
 // MARK: Dates and text

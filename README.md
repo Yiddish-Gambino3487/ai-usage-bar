@@ -1,5 +1,7 @@
 # ai-usage-bar
 
+macOS only.
+
 A native macOS menubar app that shows how much of your AI coding tools' quota
 you have used. One Swift executable, compiled locally with Apple's Command Line
 Tools. No dependencies, no third-party binaries, nothing phones home except the
@@ -13,7 +15,7 @@ Click it for the detail:
         $1,700.35 of $2,000.00 · $299.65 left
         Resets in 14 days (Sep 30, 8:00 PM)
     Codex (Business)
-        Unlimited credits, no rate windows
+        Unlimited credits, no rate limits
     Refreshed 11:14 AM
     Refresh now
     Quit
@@ -22,8 +24,8 @@ Click it for the detail:
 
 | Provider | Source | Shown |
 |----------|--------|-------|
-| Claude | Claude Code's OAuth token in Keychain, and the usage endpoint behind Claude Code's `/usage` command | Monthly spend against the plan limit (Enterprise/Team), or the 5-hour and 7-day windows on plans that have them |
-| Codex | `~/.codex/auth.json` and the Codex rate-limit endpoint | 5-hour and weekly windows when metered, `OK` when the plan is unmetered, `LIMITED` when OpenAI reports a cap reached |
+| Claude | Claude Code's OAuth token in Keychain, and the usage endpoint behind Claude Code's `/usage` command | Monthly spend against the plan limit (Enterprise/Team), or the 5-hour and 7-day rate limits on plans that have them |
+| Codex | `~/.codex/auth.json` and the Codex rate-limit endpoint | 5-hour and weekly rate limits when metered, `OK` when the plan is unmetered, `LIMITED` when OpenAI reports a cap reached |
 
 The ChatGPT chat app is not shown. It exposes no usage data locally and OpenAI
 has no consumer usage API.
@@ -75,7 +77,7 @@ remove other menubar icons to make room.
 
 ## Known gaps
 
-- Claude 5-hour and 7-day window parsing is tested against fixtures only. The
+- Claude 5-hour and 7-day rate-limit parsing is tested against fixtures only. The
   author's Enterprise account returns those fields as null, so the live shape
   has not been observed. If yours renders oddly, open an issue with the output
   of `--check`.
