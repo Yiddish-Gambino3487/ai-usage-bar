@@ -37,22 +37,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func render() {
         guard let item = statusItem else { return }
-        let claudePercent = try? claude?.get().percent
-        let codexPercent = try? codex?.get().percent ?? nil
+        let claudeUsage = try? claude?.get()
+        let codexUsage = try? codex?.get()
         let title = NSMutableAttributedString()
-        title.append(segment("Claude", percent: claudePercent))
+        title.append(segment("Claude", status: claudeUsage.map { "\($0.percent)%" } ?? "n/a",
+                             percent: claudeUsage?.percent, alarm: false))
         title.append(NSAttributedString(string: "  "))
-        title.append(segment("Codex", percent: codexPercent))
+        title.append(segment("Codex", status: codexUsage?.shortStatus ?? "n/a",
+                             percent: codexUsage?.percent, alarm: codexUsage?.limitReached ?? false))
         item.button?.attributedTitle = title
         item.menu = buildMenu()
     }
 
-    private func segment(_ name: String, percent: Int?) -> NSAttributedString {
-        let text = "\(name) " + (percent.map { "\($0)%" } ?? "n/a")
+    private func segment(_ name: String, status: String, percent: Int?, alarm: Bool) -> NSAttributedString {
         var attributes: [NSAttributedString.Key: Any] = [.font: NSFont.menuBarFont(ofSize: 0)]
-        if let percent, percent >= 90 { attributes[.foregroundColor] = NSColor.systemRed }
-        else if let percent, percent >= 75 { attributes[.foregroundColor] = NSColor.systemOrange }
-        return NSAttributedString(string: text, attributes: attributes)
+        if alarm || (percent ?? 0) >= 90 { attributes[.foregroundColor] = NSColor.systemRed }
+        else if (percent ?? 0) >= 75 { attributes[.foregroundColor] = NSColor.systemOrange }
+        return NSAttributedString(string: "\(name) \(status)", attributes: attributes)
     }
 
     private func buildMenu() -> NSMenu {

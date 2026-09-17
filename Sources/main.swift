@@ -14,7 +14,7 @@ if CommandLine.arguments.contains("--check") {
         }
         switch await attempt({ try await fetchCodexUsage() }) {
         case .success(let usage):
-            print("Codex \(usage.planType ?? "") \(usage.percent.map { "\($0)%" } ?? "n/a")")
+            print("Codex \(usage.planType ?? "") \(usage.shortStatus)")
             codexLines(usage, now: now).forEach { print("  \($0)") }
         case .failure(let error):
             print("Codex unavailable: \(error.localizedDescription)")

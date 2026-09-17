@@ -12,7 +12,7 @@ struct ClaudeUsage: Equatable, Sendable {
 
     var used: Double { Double(usedMinor) / divisor }
     var limit: Double { Double(limitMinor) / divisor }
-    var remaining: Double { max(limit - used, 0) }
+    var remaining: Double { Double(max(limitMinor - usedMinor, 0)) / divisor }
     // Floor, not round, so 84.5% reads as 84% like the Claude desktop app.
     var percent: Int { limitMinor > 0 ? Int(Double(usedMinor) * 100 / Double(limitMinor)) : 0 }
 
@@ -35,11 +35,19 @@ struct CodexUsage: Equatable, Sendable {
     let planType: String?
     let primary: CodexWindow?
     let secondary: CodexWindow?
+    let unlimitedCredits: Bool
+    let limitReached: Bool
 
-    // The binding limit is whichever window is fuller.
+    // The binding limit is whichever window is fuller. Nil when the plan has no metered windows.
     var percent: Int? {
         let values = [primary, secondary].compactMap { $0?.usedPercent }
         return values.max().map { Int($0) }
+    }
+
+    var shortStatus: String {
+        if limitReached { return "LIMITED" }
+        if let percent { return "\(percent)%" }
+        return unlimitedCredits ? "OK" : "n/a"
     }
 }
 
@@ -86,15 +94,19 @@ private struct CodexResponse: Decodable {
         let resetAfterSeconds: Double?
     }
     struct RateLimit: Decodable { let primaryWindow: Window?; let secondaryWindow: Window? }
+    struct Credits: Decodable { let unlimited: Bool? }
+    struct SpendControl: Decodable { let reached: Bool? }
     let planType: String?
     let rateLimit: RateLimit?
+    let rateLimitReachedType: String?
+    let credits: Credits?
+    let spendControl: SpendControl?
 }
 
 func parseCodexUsage(_ data: Data, now: Date = Date()) throws -> CodexUsage {
     let decoder = JSONDecoder()
     decoder.keyDecodingStrategy = .convertFromSnakeCase
     let response = try decoder.decode(CodexResponse.self, from: data)
-    guard let rateLimit = response.rateLimit else { throw UsageError.missingField("rate_limit") }
 
     func window(_ raw: CodexResponse.Window?) -> CodexWindow? {
         guard let raw, let used = raw.usedPercent else { return nil }
@@ -104,10 +116,11 @@ func parseCodexUsage(_ data: Data, now: Date = Date()) throws -> CodexUsage {
         return CodexWindow(usedPercent: used, windowSeconds: raw.limitWindowSeconds, resetAt: reset)
     }
 
-    let primary = window(rateLimit.primaryWindow)
-    let secondary = window(rateLimit.secondaryWindow)
-    guard primary != nil || secondary != nil else { throw UsageError.missingField("rate_limit windows") }
-    return CodexUsage(planType: response.planType, primary: primary, secondary: secondary)
+    return CodexUsage(planType: response.planType,
+                      primary: window(response.rateLimit?.primaryWindow),
+                      secondary: window(response.rateLimit?.secondaryWindow),
+                      unlimitedCredits: response.credits?.unlimited ?? false,
+                      limitReached: response.rateLimitReachedType != nil || response.spendControl?.reached == true)
 }
 
 // MARK: - Dates
@@ -144,9 +157,8 @@ func formatReset(_ date: Date, now: Date, timeZone: TimeZone = .current) -> Stri
     return formatter.string(from: date)
 }
 
-func menubarText(claude: Int?, codex: Int?) -> String {
-    func part(_ name: String, _ value: Int?) -> String { "\(name) " + (value.map { "\($0)%" } ?? "n/a") }
-    return part("Claude", claude) + "  " + part("Codex", codex)
+func menubarText(claude: String, codex: String) -> String {
+    "Claude \(claude)  Codex \(codex)"
 }
 
 func claudeLines(_ usage: ClaudeUsage, now: Date, timeZone: TimeZone = .current) -> [String] {
@@ -162,10 +174,15 @@ func claudeLines(_ usage: ClaudeUsage, now: Date, timeZone: TimeZone = .current)
 }
 
 func codexLines(_ usage: CodexUsage, now: Date, timeZone: TimeZone = .current) -> [String] {
-    [usage.primary, usage.secondary].compactMap { window in
+    var lines: [String] = [usage.primary, usage.secondary].compactMap { window in
         guard let window else { return nil }
         var line = "\(window.label) \(Int(window.usedPercent))%"
         if let reset = window.resetAt { line += " · resets \(formatReset(reset, now: now, timeZone: timeZone))" }
         return line
     }
+    if lines.isEmpty {
+        lines.append(usage.unlimitedCredits ? "Unlimited credits, no rate windows" : "No rate windows reported")
+    }
+    if usage.limitReached { lines.append("Limit reached") }
+    return lines
 }

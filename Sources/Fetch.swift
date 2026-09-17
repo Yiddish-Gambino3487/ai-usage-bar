@@ -7,7 +7,7 @@ import Security
 
 private let userAgent = "ai-usage-bar/1.0"
 
-func attempt<T: Sendable>(_ operation: () async throws -> T) async -> Result<T, Error> {
+func attempt<T: Sendable>(_ operation: @Sendable () async throws -> T) async -> Result<T, Error> {
     do { return .success(try await operation()) } catch { return .failure(error) }
 }
 
