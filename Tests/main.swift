@@ -24,20 +24,38 @@ let claudeJSON = """
 print("Claude parsing")
 do {
     let usage = try parseClaudeUsage(claudeJSON, plan: "enterprise")
-    check(usage.used, 1690.70, "used dollars")
-    check(usage.limit, 2000.0, "limit dollars")
-    check(usage.remaining, 309.30, "remaining dollars")
+    let spend = usage.spend!
+    check(spend.used, 1690.70, "used dollars")
+    check(spend.limit, 2000.0, "limit dollars")
+    check(spend.remaining, 309.30, "remaining dollars")
     check(usage.percent, 84, "percent floors like the desktop app")
+    check(usage.shortStatus, "84%", "short status")
     check(usage.plan, "enterprise", "plan carried through")
+    check(usage.windows.isEmpty, "Enterprise has no rate windows")
     let lines = claudeLines(usage, now: now, timeZone: eastern)
     check(lines[0], "$1,690.70 of $2,000.00 · $309.30 left", "money line")
     check(lines[1], "Resets in 14 days (Sep 30, 8:00 PM)", "reset line in Eastern")
 } catch { check(false, "unexpected error \(error)") }
 
-print("Claude with no spend block (consumer plan)")
-let noSpend = #"{"five_hour":{"utilization":12.0},"spend":null}"#.data(using: .utf8)!
-do { _ = try parseClaudeUsage(noSpend); check(false, "should have thrown") }
-catch let error as UsageError { check(error, .missingField("spend"), "missing spend error") }
+print("Claude on a plan with rate windows and no spend limit")
+let windowsJSON = """
+{"five_hour":{"utilization":12.5,"resets_at":"2026-09-17T15:00:00.000000+00:00"},
+ "seven_day":{"utilization":41.0,"resets_at":"2026-09-20T17:00:00Z"},
+ "spend":null}
+""".data(using: .utf8)!
+do {
+    let usage = try parseClaudeUsage(windowsJSON, plan: "max")
+    check(usage.spend, nil, "no spend block")
+    check(usage.windows.count, 2, "both windows parsed")
+    check(usage.percent, 41, "percent is the fuller window")
+    let lines = claudeLines(usage, now: now, timeZone: eastern)
+    check(lines, ["5-hour window 12% · resets 11:00 AM", "Weekly 41% · resets Sun 1:00 PM"], "window lines")
+} catch { check(false, "unexpected error \(error)") }
+
+print("Claude with neither spend nor windows")
+let emptyJSON = #"{"five_hour":null,"seven_day":null,"spend":null}"#.data(using: .utf8)!
+do { _ = try parseClaudeUsage(emptyJSON); check(false, "should have thrown") }
+catch let error as UsageError { check(error, .missingField("spend limit or rate windows"), "clear error") }
 catch { check(false, "wrong error type \(error)") }
 
 // MARK: Codex parsing

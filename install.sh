@@ -3,7 +3,7 @@
 # Quit from the menu exits cleanly and is not restarted. Re-run after ./build.sh to relaunch.
 set -euo pipefail
 cd "$(dirname "$0")"
-label=com.dbaron.ai-usage-bar
+label=local.ai-usage-bar
 plist=~/Library/LaunchAgents/$label.plist
 cat > "$plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

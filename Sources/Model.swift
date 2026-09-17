@@ -3,8 +3,7 @@ import Foundation
 // Pure data types and functions. No network, no Keychain, no AppKit.
 // Everything in this file is exercised by Tests/main.swift.
 
-struct ClaudeUsage: Equatable, Sendable {
-    let plan: String?
+struct ClaudeSpend: Equatable, Sendable {
     let usedMinor: Int
     let limitMinor: Int
     let exponent: Int
@@ -17,6 +16,26 @@ struct ClaudeUsage: Equatable, Sendable {
     var percent: Int { limitMinor > 0 ? Int(Double(usedMinor) * 100 / Double(limitMinor)) : 0 }
 
     private var divisor: Double { pow(10.0, Double(exponent)) }
+}
+
+struct ClaudeWindow: Equatable, Sendable {
+    let label: String
+    let utilization: Double
+    let resetsAt: Date?
+}
+
+struct ClaudeUsage: Equatable, Sendable {
+    let plan: String?
+    let spend: ClaudeSpend?          // Enterprise/Team monthly spend limit
+    let windows: [ClaudeWindow]      // 5-hour and 7-day windows on plans that have them
+
+    // Spend limit wins when present; otherwise the fuller rate window.
+    var percent: Int? {
+        if let spend { return spend.percent }
+        return windows.map(\.utilization).max().map { Int($0) }
+    }
+
+    var shortStatus: String { percent.map { "\($0)%" } ?? "n/a" }
 }
 
 struct CodexWindow: Equatable, Sendable {
@@ -72,18 +91,47 @@ enum UsageError: LocalizedError, Equatable {
 private struct ClaudeResponse: Decodable {
     struct Money: Decodable { let amountMinor: Int; let currency: String; let exponent: Int }
     struct Spend: Decodable { let used: Money?; let limit: Money? }
+    struct Window: Decodable { let utilization: Double?; let resetsAt: FlexibleDate? }
     let spend: Spend?
+    let fiveHour: Window?
+    let sevenDay: Window?
+}
+
+// resets_at has been seen as an ISO 8601 string; accept a unix timestamp too.
+struct FlexibleDate: Decodable {
+    let date: Date?
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let seconds = try? container.decode(Double.self) { date = Date(timeIntervalSince1970: seconds); return }
+        if let text = try? container.decode(String.self) {
+            let iso = ISO8601DateFormatter()
+            iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            date = iso.date(from: text) ?? ISO8601DateFormatter().date(from: text)
+            return
+        }
+        date = nil
+    }
 }
 
 func parseClaudeUsage(_ data: Data, plan: String? = nil) throws -> ClaudeUsage {
     let decoder = JSONDecoder()
     decoder.keyDecodingStrategy = .convertFromSnakeCase
     let response = try decoder.decode(ClaudeResponse.self, from: data)
-    guard let spend = response.spend else { throw UsageError.missingField("spend") }
-    guard let used = spend.used else { throw UsageError.missingField("spend.used") }
-    guard let limit = spend.limit else { throw UsageError.missingField("spend.limit") }
-    return ClaudeUsage(plan: plan, usedMinor: used.amountMinor, limitMinor: limit.amountMinor,
-                       exponent: used.exponent, currency: used.currency)
+
+    var spend: ClaudeSpend?
+    if let used = response.spend?.used, let limit = response.spend?.limit {
+        spend = ClaudeSpend(usedMinor: used.amountMinor, limitMinor: limit.amountMinor,
+                            exponent: used.exponent, currency: used.currency)
+    }
+
+    func window(_ raw: ClaudeResponse.Window?, _ label: String) -> ClaudeWindow? {
+        guard let raw, let utilization = raw.utilization else { return nil }
+        return ClaudeWindow(label: label, utilization: utilization, resetsAt: raw.resetsAt?.date)
+    }
+    let windows = [window(response.fiveHour, "5-hour window"), window(response.sevenDay, "Weekly")].compactMap { $0 }
+
+    guard spend != nil || !windows.isEmpty else { throw UsageError.missingField("spend limit or rate windows") }
+    return ClaudeUsage(plan: plan, spend: spend, windows: windows)
 }
 
 private struct CodexResponse: Decodable {
@@ -162,15 +210,22 @@ func menubarText(claude: String, codex: String) -> String {
 }
 
 func claudeLines(_ usage: ClaudeUsage, now: Date, timeZone: TimeZone = .current) -> [String] {
-    let reset = nextMonthStartUTC(after: now)
-    let resetFormatter = DateFormatter()
-    resetFormatter.locale = Locale(identifier: "en_US")
-    resetFormatter.timeZone = timeZone
-    resetFormatter.dateFormat = "MMM d, h:mm a"
-    return [
-        "\(formatMoney(usage.used, currency: usage.currency)) of \(formatMoney(usage.limit, currency: usage.currency)) · \(formatMoney(usage.remaining, currency: usage.currency)) left",
-        "Resets in \(daysUntil(reset, from: now)) days (\(resetFormatter.string(from: reset)))",
-    ]
+    var lines: [String] = []
+    if let spend = usage.spend {
+        let reset = nextMonthStartUTC(after: now)
+        let resetFormatter = DateFormatter()
+        resetFormatter.locale = Locale(identifier: "en_US")
+        resetFormatter.timeZone = timeZone
+        resetFormatter.dateFormat = "MMM d, h:mm a"
+        lines.append("\(formatMoney(spend.used, currency: spend.currency)) of \(formatMoney(spend.limit, currency: spend.currency)) · \(formatMoney(spend.remaining, currency: spend.currency)) left")
+        lines.append("Resets in \(daysUntil(reset, from: now)) days (\(resetFormatter.string(from: reset)))")
+    }
+    for window in usage.windows {
+        var line = "\(window.label) \(Int(window.utilization))%"
+        if let reset = window.resetsAt { line += " · resets \(formatReset(reset, now: now, timeZone: timeZone))" }
+        lines.append(line)
+    }
+    return lines
 }
 
 func codexLines(_ usage: CodexUsage, now: Date, timeZone: TimeZone = .current) -> [String] {

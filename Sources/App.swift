@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let claudeUsage = try? claude?.get()
         let codexUsage = try? codex?.get()
         let title = NSMutableAttributedString()
-        title.append(segment("Claude", status: claudeUsage.map { "\($0.percent)%" } ?? "n/a",
+        title.append(segment("Claude", status: claudeUsage?.shortStatus ?? "n/a",
                              percent: claudeUsage?.percent, alarm: false))
         title.append(NSAttributedString(string: "  "))
         title.append(segment("Codex", status: codexUsage?.shortStatus ?? "n/a",

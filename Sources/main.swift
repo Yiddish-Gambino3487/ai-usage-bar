@@ -7,7 +7,7 @@ if CommandLine.arguments.contains("--check") {
         let now = Date()
         switch await attempt({ try await fetchClaudeUsage() }) {
         case .success(let usage):
-            print("Claude \(usage.plan ?? "") \(usage.percent)%")
+            print("Claude \(usage.plan ?? "") \(usage.shortStatus)")
             claudeLines(usage, now: now).forEach { print("  \($0)") }
         case .failure(let error):
             print("Claude unavailable: \(error.localizedDescription)")
