@@ -1,0 +1,31 @@
+import AppKit
+
+// `AIUsageBar --check` prints the same numbers the menubar shows, then exits.
+// Useful for verifying from Terminal without launching the menubar.
+if CommandLine.arguments.contains("--check") {
+    Task {
+        let now = Date()
+        switch await attempt({ try await fetchClaudeUsage() }) {
+        case .success(let usage):
+            print("Claude \(usage.plan ?? "") \(usage.percent)%")
+            claudeLines(usage, now: now).forEach { print("  \($0)") }
+        case .failure(let error):
+            print("Claude unavailable: \(error.localizedDescription)")
+        }
+        switch await attempt({ try await fetchCodexUsage() }) {
+        case .success(let usage):
+            print("Codex \(usage.planType ?? "") \(usage.percent.map { "\($0)%" } ?? "n/a")")
+            codexLines(usage, now: now).forEach { print("  \($0)") }
+        case .failure(let error):
+            print("Codex unavailable: \(error.localizedDescription)")
+        }
+        exit(0)
+    }
+    dispatchMain()
+}
+
+let app = NSApplication.shared
+app.setActivationPolicy(.accessory)
+let delegate = AppDelegate()
+app.delegate = delegate
+app.run()
