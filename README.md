@@ -67,6 +67,21 @@ If the menubar item does not appear on a MacBook screen, the menubar is full
 and macOS hid it. It will show on an external display; on the built-in screen,
 remove other menubar icons to make room.
 
+## Operating it
+
+The LaunchAgent restarts the app automatically after a crash. Choosing
+**Quit** from the menu is treated as deliberate and it stays down until you
+start it again or log in.
+
+    launchctl kickstart gui/$(id -u)/local.ai-usage-bar          # start it again after Quit
+    launchctl print gui/$(id -u)/local.ai-usage-bar | grep -E 'state|pid'   # is it running?
+    cat build/stderr.log                                        # crash output, if any
+    ./build/AIUsageBar --check                                  # run the fetches in Terminal
+
+If `launchctl print` says the service could not be found, run `./install.sh`.
+After pulling new code, run `./build.sh` then `./install.sh` to relaunch on the
+new binary.
+
 ## Layout
 
 - `Sources/Model.swift`: parsing, date math, formatting. Pure functions, all tested.
